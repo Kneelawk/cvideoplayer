@@ -46,6 +46,18 @@ int main(const int argc, char **argv) {
 
     printf("Video format: %s, duration: %ld us\n", fmtCtx->iformat->long_name, fmtCtx->duration);
 
+    if (avformat_find_stream_info(fmtCtx, nullptr)) {
+        glfwTerminate();
+        fprintf(stderr, "Unable to open video streams: %s", video_path);
+    }
+
+    for (int i = 0; i < fmtCtx->nb_streams; i++) {
+        printf("Stream %d:\n", i);
+        const AVCodecParameters *codecParams = fmtCtx->streams[i]->codecpar;
+        const AVCodec *codec = avcodec_find_decoder(codecParams->codec_id);
+        printf("  Codec: %s\n", codec->long_name);
+    }
+
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT);
 
