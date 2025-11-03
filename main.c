@@ -8,7 +8,7 @@ int setup_window(GLFWwindow **window) {
         return -2;
     }
 
-    *window = glfwCreateWindow(640, 480, "CVideoPlayer", NULL, NULL);
+    *window = glfwCreateWindow(640, 480, "CVideoPlayer", nullptr, nullptr);
     if (!*window) {
         glfwTerminate();
         fprintf(stderr, "Unable to open window.");
@@ -17,8 +17,12 @@ int setup_window(GLFWwindow **window) {
 
     glfwMakeContextCurrent(*window);
 
-    glClearColor(0.0, 0.2, 0.3, 1.0);
+    glClearColor(0.0f, 0.2f, 0.3f, 1.0f);
     return 0;
+}
+
+void cleanup(AVFormatContext *pFmtCtx) {
+    if (pFmtCtx) avformat_free_context(pFmtCtx);
 }
 
 int main(const int argc, char **argv) {
@@ -29,45 +33,55 @@ int main(const int argc, char **argv) {
 
     const char *video_path = argv[1];
 
-    GLFWwindow *window;
+    GLFWwindow *pWin = nullptr;
+    AVFormatContext *pFmtCtx = nullptr;
 
-    const int value = setup_window(&window);
+    const int value = setup_window(&pWin);
     if (value) return value;
 
-    AVFormatContext *fmtCtx = avformat_alloc_context();
+    pFmtCtx = avformat_alloc_context();
 
-    if (avformat_open_input(&fmtCtx, video_path, nullptr, nullptr)) {
+    if (avformat_open_input(&pFmtCtx, video_path, nullptr, nullptr)) {
         glfwTerminate();
         fprintf(stderr, "Unable to open video: %s", video_path);
         return -3;
     }
 
-    printf("AVFormatContext SIZEOF: %lu, ALIGNOF: %lu, IFORMAT: %lu, DURATION: %lu\n", sizeof(AVFormatContext), alignof(AVFormatContext), offsetof(AVFormatContext, iformat), offsetof(AVFormatContext, duration));
-
-    printf("Video format: %s, duration: %ld us\n", fmtCtx->iformat->long_name, fmtCtx->duration);
-
-    if (avformat_find_stream_info(fmtCtx, nullptr)) {
+    if (avformat_find_stream_info(pFmtCtx, nullptr)) {
         glfwTerminate();
         fprintf(stderr, "Unable to open video streams: %s", video_path);
+        cleanup(pFmtCtx);
+        return -4;
     }
 
-    for (int i = 0; i < fmtCtx->nb_streams; i++) {
-        printf("Stream %d:\n", i);
-        const AVCodecParameters *codecParams = fmtCtx->streams[i]->codecpar;
-        const AVCodec *codec = avcodec_find_decoder(codecParams->codec_id);
-        printf("  Codec: %s\n", codec->long_name);
+    av_dump_format(pFmtCtx, 0, video_path, false);
+
+    int vStreamIdx = -1, aStreamIdx = -1;
+    for (int i = 0; i < pFmtCtx->nb_streams; i++) {
+        if (vStreamIdx == -1 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            vStreamIdx = i;
+        } else if (aStreamIdx == -1 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            aStreamIdx = i;
+        }
     }
 
-    while (!glfwWindowShouldClose(window)) {
+    if (vStreamIdx == -1 && aStreamIdx == -1) {
+        glfwTerminate();
+        fprintf(stderr, "Video has no video or audio streams: %s", video_path);
+        cleanup(pFmtCtx);
+        return -5;
+    }
+
+    while (!glfwWindowShouldClose(pWin)) {
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glfwSwapBuffers(window);
+        glfwSwapBuffers(pWin);
 
         glfwPollEvents();
     }
 
     glfwTerminate();
 
-    if (fmtCtx) avformat_free_context(fmtCtx);
+    cleanup(pFmtCtx);
     return 0;
 }
